@@ -64,8 +64,12 @@ def main(_):
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
+
+    # Only train on one epoch - never see an example twice
+    num_iterations = len(mnist.train.labels) // BATCH_SIZE
+
     # Train
-    for iteration in range(6000):
+    for iteration in range(num_iterations):
         batch_xs, batch_ys = mnist.train.next_batch(BATCH_SIZE)
         # Uniform Random logging policy
         batch_mask = np.random.randint(NUM_ACTIONS, size=BATCH_SIZE)
@@ -76,6 +80,9 @@ def main(_):
             error_term,
             masked_error,
         ], feed_dict={x: batch_xs, y_: batch_ys, mask: batch_mask})
+
+        if iteration % 50 == 0:
+            print("Iteration {0}: Loss {1}".format(iteration, batch_loss))
 
     # Test trained model
     correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
