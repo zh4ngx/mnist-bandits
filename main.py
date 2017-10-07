@@ -25,44 +25,57 @@ from __future__ import print_function
 import argparse
 import sys
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
 FLAGS = None
 
+BATCH_SIZE = 100
+NUM_ACTIONS = 10
+LEARNING_RATE = 0.05
+
+# Reproduce results
+SEED = 12345
+np.random.seed(SEED)
+
 
 def main(_):
     # Import data
-    mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
+    mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True, seed=SEED)
 
     # Create the model
     x = tf.placeholder(tf.float32, [None, 784])
-    W = tf.Variable(tf.zeros([784, 10]))
+    W = tf.Variable(tf.zeros([784, NUM_ACTIONS]))
     b = tf.Variable(tf.zeros([10]))
     y = tf.matmul(x, W) + b
 
     # Define loss and optimizer
-    y_ = tf.placeholder(tf.float32, [None, 10])
+    y_ = tf.placeholder(tf.float32, [None, NUM_ACTIONS])
 
-    # The raw formulation of cross-entropy,
-    #
-    #   tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.nn.softmax(y)),
-    #                                 reduction_indices=[1]))
-    #
-    # can be numerically unstable.
-    #
-    # So here we use tf.nn.softmax_cross_entropy_with_logits on the raw
-    # outputs of 'y', and then average across the batch.
-    cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
-    train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
+    # Implement MTR L2 Loss by masking all rewards except logged action
+    mask = tf.placeholder(tf.int32, [None])
+    one_hot_mask = tf.one_hot(indices=mask, depth=NUM_ACTIONS)
+    error_term = y_ - y
+    masked_error = tf.multiply(error_term, one_hot_mask)
+    loss = tf.nn.l2_loss(masked_error) / BATCH_SIZE
+
+    train_step = tf.train.GradientDescentOptimizer(LEARNING_RATE).minimize(loss)
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
     # Train
-    for _ in range(1000):
-        batch_xs, batch_ys = mnist.train.next_batch(100)
-        sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
+    for iteration in range(6000):
+        batch_xs, batch_ys = mnist.train.next_batch(BATCH_SIZE)
+        # Uniform Random logging policy
+        batch_mask = np.random.randint(NUM_ACTIONS, size=BATCH_SIZE)
+
+        _, batch_loss, batch_error_term, batch_masked_error = sess.run([
+            train_step,
+            loss,
+            error_term,
+            masked_error,
+        ], feed_dict={x: batch_xs, y_: batch_ys, mask: batch_mask})
 
     # Test trained model
     correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
