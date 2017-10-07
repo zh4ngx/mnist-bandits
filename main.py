@@ -34,6 +34,7 @@ FLAGS = None
 BATCH_SIZE = 100
 NUM_ACTIONS = 10
 LEARNING_RATE = 0.05
+NUM_EPOCHS = 10
 
 # Reproduce results
 SEED = 12345
@@ -66,7 +67,8 @@ def main(_):
     tf.global_variables_initializer().run()
 
     # Only train on one epoch - never see an example twice
-    num_iterations = len(mnist.train.labels) // BATCH_SIZE
+    iterations_per_epoch = len(mnist.train.labels) // BATCH_SIZE
+    num_iterations = iterations_per_epoch * NUM_EPOCHS
 
     # Train
     for iteration in range(num_iterations):
@@ -81,7 +83,7 @@ def main(_):
             masked_error,
         ], feed_dict={x: batch_xs, y_: batch_ys, mask: batch_mask})
 
-        if iteration % 50 == 0:
+        if iteration % 1000 == 0:
             print("Iteration {0}: Loss {1}".format(iteration, batch_loss))
 
     # Test trained model
