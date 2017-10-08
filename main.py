@@ -33,6 +33,7 @@ FLAGS = None
 
 BATCH_SIZE = 100
 NUM_ACTIONS = 10
+NUM_HIDDEN = 32
 LEARNING_RATE = 0.05
 NUM_EPOCHS = 10
 
@@ -47,9 +48,11 @@ def main(_):
 
     # Create the model
     x = tf.placeholder(tf.float32, [None, 784])
-    W = tf.Variable(tf.zeros([784, NUM_ACTIONS]))
-    b = tf.Variable(tf.zeros([10]))
-    y = tf.matmul(x, W) + b
+    weights_in = tf.Variable(tf.zeros([784, NUM_HIDDEN]))
+    weights_out = tf.Variable(tf.zeros([NUM_HIDDEN, NUM_ACTIONS]))
+    b = tf.Variable(tf.zeros([NUM_ACTIONS]))
+    h = tf.matmul(x, weights_in)
+    y = tf.matmul(h, weights_out) + b
 
     # Define loss and optimizer
     y_ = tf.placeholder(tf.float32, [None, NUM_ACTIONS])
