@@ -33,9 +33,9 @@ FLAGS = None
 
 BATCH_SIZE = 100
 NUM_ACTIONS = 10
-NUM_HIDDEN = 32
-LEARNING_RATE = 0.05
-NUM_EPOCHS = 10
+NUM_HIDDEN = 16
+BASE_LEARNING_RATE = 0.1
+NUM_EPOCHS = 100
 
 # Reproduce results
 SEED = 12345
@@ -46,10 +46,14 @@ def main(_):
     # Import data
     mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True, seed=SEED)
 
+    iterations_per_epoch = len(mnist.train.labels) // BATCH_SIZE
+    num_iterations = iterations_per_epoch * NUM_EPOCHS
+
     # Create the model
     x = tf.placeholder(tf.float32, [None, 784])
-    weights_in = tf.Variable(tf.zeros([784, NUM_HIDDEN]))
-    weights_out = tf.Variable(tf.zeros([NUM_HIDDEN, NUM_ACTIONS]))
+
+    weights_in = tf.Variable(tf.truncated_normal(shape=[784, NUM_HIDDEN], stddev=0.1))
+    weights_out = tf.Variable(tf.truncated_normal(shape=[NUM_HIDDEN, NUM_ACTIONS], stddev=0.01))
     b = tf.Variable(tf.zeros([NUM_ACTIONS]))
     h = tf.matmul(x, weights_in)
     y = tf.matmul(h, weights_out) + b
@@ -63,15 +67,15 @@ def main(_):
     error_term = y_ - y
     masked_error = tf.multiply(error_term, one_hot_mask)
     loss = tf.nn.l2_loss(masked_error) / BATCH_SIZE
+    global_step = tf.Variable(0, trainable=False)
 
-    train_step = tf.train.GradientDescentOptimizer(LEARNING_RATE).minimize(loss)
+    learning_rate = tf.train.exponential_decay(BASE_LEARNING_RATE, global_step,
+                                               iterations_per_epoch, 0.96, staircase=True)
+
+    train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
-
-    # Only train on one epoch - never see an example twice
-    iterations_per_epoch = len(mnist.train.labels) // BATCH_SIZE
-    num_iterations = iterations_per_epoch * NUM_EPOCHS
 
     # Train
     for iteration in range(num_iterations):
@@ -79,15 +83,25 @@ def main(_):
         # Uniform Random logging policy
         batch_mask = np.random.randint(NUM_ACTIONS, size=BATCH_SIZE)
 
-        _, batch_loss, batch_error_term, batch_masked_error = sess.run([
-            train_step,
-            loss,
-            error_term,
-            masked_error,
-        ], feed_dict={x: batch_xs, y_: batch_ys, mask: batch_mask})
+        _, batch_loss, batch_error_term, batch_masked_error, batch_weights_in, batch_weights_out, batch_b, batch_h, batch_lr = sess.run(
+            [
+                train_step,
+                loss,
+                error_term,
+                masked_error,
+                weights_in,
+                weights_out,
+                b,
+                h,
+                learning_rate,
+            ], feed_dict={x: batch_xs, y_: batch_ys, mask: batch_mask})
 
         if iteration % 1000 == 0:
-            print("Iteration {0}: Loss {1}".format(iteration, batch_loss))
+            correct = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+            valid_acc = tf.reduce_mean(tf.cast(correct, tf.float32))
+            iter_valid_acc = sess.run(valid_acc, feed_dict={x: mnist.validation.images, y_: mnist.validation.labels})
+            print("Iteration {0}: Loss {1}, Valid Acc {2}, LR {3}".format(iteration, batch_loss, iter_valid_acc,
+                                                                          batch_lr))
 
     # Test trained model
     correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
